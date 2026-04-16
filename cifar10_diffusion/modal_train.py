@@ -65,13 +65,36 @@ def train_cifar10(
     print(f"Done — checkpoints at {CHECKPOINT_DIR}")
 
 
+@app.function(
+    image=image,
+    volumes={"/vol": vol},
+)
+def read_checkpoint(remote_path: str) -> bytes:
+    """Read a file from the volume and return its raw bytes."""
+    with open(remote_path, "rb") as f:
+        return f.read()
+
+
 @app.local_entrypoint()
 def main(
     batch_size: int   = 128,
     epochs:     int   = 500,
     lr:         float = 2e-4,
     base_ch:    int   = 128,
+    action:     str   = "train",   # "train" or "download"
+    output:     str   = "./checkpoints/model.pth",
 ):
+    if action == "download":
+        import os
+        remote_path = f"{CHECKPOINT_DIR}/model.pth"
+        print(f"Downloading {remote_path} → {output} …")
+        data = read_checkpoint.remote(remote_path)
+        os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+        with open(output, "wb") as f:
+            f.write(data)
+        print(f"Saved {len(data) // (1024*1024):.1f} MB → {output}")
+        return
+
     train_cifar10.remote(
         batch_size = batch_size,
         epochs     = epochs,
