@@ -58,6 +58,8 @@ modal run modal_train.py --action download --output ./checkpoints/model.pth
 
 ## Inference
 
+### Local
+
 ```bash
 # DDIM sampling (fast, 50 steps) — class 3 (cat)
 python inference.py --label_class 3 --sampler ddim
@@ -73,7 +75,7 @@ python inference.py --label_class 5 --sampler ddim \
 python inference.py --label_class 0 --sampler ddim --save_individual
 ```
 
-### Arguments
+#### Arguments
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -86,6 +88,42 @@ python inference.py --label_class 0 --sampler ddim --save_individual
 | `--ddim_eta` | `0.0` | 0 = deterministic, 1 = DDPM stochastic |
 | `--output_dir` | `./generated` | Where to save images |
 | `--save_individual` | off | Also save each image separately |
+
+---
+
+### Modal (streamed — live VS Code preview)
+
+Generates on a remote A100 and streams each batch back to your machine as it
+finishes. VS Code image preview updates in real time.
+
+```bash
+# DDIM, class 3 (cat), 16 images (default)
+modal run modal_inference.py --label_class 3
+
+# DDPM, class 7 (horse), 32 images, guidance 5
+modal run modal_inference.py --label_class 7 --sampler ddpm \
+    --num_images 32 --guidance_scale 5.0
+
+# All 10 classes, 16 images each, 8 at a time
+modal run modal_inference.py --label_class -1 --num_images 16 --batch_size 8
+```
+
+Open `generated/grid_class<N>_<name>.png` in VS Code — it overwrites after
+every batch so the preview refreshes live.
+
+#### Arguments
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--label_class` | `0` | CIFAR-10 class 0-9; `-1` = all classes |
+| `--sampler` | `ddim` | `ddpm` or `ddim` |
+| `--num_images` | `16` | Total images to generate |
+| `--batch_size` | `4` | Images per streamed batch |
+| `--guidance_scale` | `3.0` | CFG scale (1 = no CFG) |
+| `--ddim_steps` | `50` | DDIM denoising steps |
+| `--ddim_eta` | `0.0` | 0 = deterministic, 1 = DDPM stochastic |
+| `--output_dir` | `./generated` | Local directory for saved images |
+| `--checkpoint` | `""` | Override checkpoint path on volume |
 
 ---
 
@@ -105,11 +143,13 @@ python inference.py --label_class 0 --sampler ddim --save_individual
 
 ```
 cifar10_diffusion/
-├── model.py        # U-Net noise predictor
-├── diffusion.py    # DDPM / DDIM processes + CFG
-├── train.py        # Training script with EMA
-├── inference.py    # CLI image generation
-├── modal_train.py  # Modal GPU deployment
+├── src/
+│   ├── model.py           # U-Net noise predictor
+│   └── diffusion.py       # DDPM / DDIM processes + CFG
+├── train.py               # Training script with EMA
+├── inference.py           # Local CLI image generation
+├── modal_train.py         # Modal cloud training (A100)
+├── modal_inference.py     # Modal streaming inference → live VS Code preview
 ├── requirements.txt
 └── .gitignore
 ```
