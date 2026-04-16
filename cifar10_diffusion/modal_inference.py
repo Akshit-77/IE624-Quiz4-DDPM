@@ -183,17 +183,15 @@ def main(
     output_dir:     str   = "./generated",
     checkpoint:     str   = "",
 ):
-    from PIL import Image as PILImage
-    import numpy as np
-
+    # No local PIL/numpy needed — remote sends ready-made PNG bytes
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
     classes_to_run = list(range(10)) if label_class == -1 else [label_class]
 
     for cls in classes_to_run:
-        cls_name    = CIFAR10_CLASSES[cls]
-        all_batches = []   # collect PIL images for the running grid
+        cls_name   = CIFAR10_CLASSES[cls]
+        batch_paths = []
 
         print(f"\n── Class {cls} ({cls_name}) ──────────────────────────────")
 
@@ -207,15 +205,14 @@ def main(
             batch_size     = batch_size,
             checkpoint     = checkpoint,
         ):
-            # ── Save individual batch grid ───────────────────────────────
+            # Write PNG bytes directly — no local PIL needed
             batch_path = out / f"batch_class{cls}_{cls_name}_{batch_idx:04d}.png"
             batch_path.write_bytes(png_bytes)
+            batch_paths.append(batch_path)
             print(f"  [local] batch {batch_idx:04d} saved → {batch_path}")
 
-            # ── Append to running collection & rebuild full grid ─────────
-            all_batches.append(PILImage.open(io.BytesIO(png_bytes)))
-
-            _save_running_grid(all_batches, out, cls, cls_name)
+            # Try to build a running grid if Pillow happens to be installed
+            _try_update_grid(batch_paths, out, cls, cls_name)
 
         print(f"  [local] class {cls} ({cls_name}) complete — "
               f"{num_images} image(s) in {out}/")
@@ -223,29 +220,32 @@ def main(
     print(f"\nAll done. Open {out}/ in VS Code Explorer to browse results.")
 
 
-# ── Helper: stitch all batch-grid PNGs into one growing overview ─────────────
+# ── Optional helper: stitch batch PNGs into one growing overview ──────────────
 
-def _save_running_grid(
-    batch_images: list,
-    out_dir:      Path,
-    cls:          int,
-    cls_name:     str,
+def _try_update_grid(
+    batch_paths: list,
+    out_dir:     Path,
+    cls:         int,
+    cls_name:    str,
 ):
-    """Horizontally stack all batch grids and save as a single overview PNG."""
-    from PIL import Image as PILImage
-    import numpy as np
+    """
+    Horizontally stack saved batch PNGs into a single overview file.
+    Silently skipped if Pillow is not installed locally.
+    """
+    try:
+        from PIL import Image as PILImage
+    except ImportError:
+        return   # Pillow not installed locally — individual batch files still saved
 
-    arrays = [np.array(img) for img in batch_images]
-    # Pad heights to match (they should be equal, but be safe)
-    max_h = max(a.shape[0] for a in arrays)
-    padded = []
-    for a in arrays:
-        if a.shape[0] < max_h:
-            pad = np.ones((max_h - a.shape[0], a.shape[1], 3), dtype=np.uint8) * 255
-            a = np.vstack([a, pad])
-        padded.append(a)
+    images  = [PILImage.open(p) for p in batch_paths]
+    max_h   = max(img.height for img in images)
+    widths  = [img.width for img in images]
+    canvas  = PILImage.new("RGB", (sum(widths), max_h), (255, 255, 255))
+    x       = 0
+    for img in images:
+        canvas.paste(img, (x, 0))
+        x += img.width
 
-    overview = np.hstack(padded)
     grid_path = out_dir / f"grid_class{cls}_{cls_name}.png"
-    PILImage.fromarray(overview).save(grid_path)
+    canvas.save(grid_path)
     print(f"  [local] running grid updated → {grid_path}")
