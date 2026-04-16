@@ -49,6 +49,7 @@ image = (
         extra_index_url="https://download.pytorch.org/whl/cu121",
     )
     .uv_pip_install("tqdm", "numpy", "Pillow")
+    .uv_pip_install("torchmetrics[image]", "scipy")
     .add_local_dir("src", "/app/src")
     .add_local_dir(
         ".", "/app",
@@ -169,6 +170,96 @@ def stream_generate(
         batch_idx += 1
 
 
+# ── Remote metrics function — runs entirely on Modal GPU ─────────────────────
+
+@app.function(
+    image=image,
+    gpu="A100",
+    timeout=1800,
+    volumes={"/vol": vol},
+)
+def evaluate_metrics(
+    num_samples:    int   = 1000,
+    label_class:    int   = -1,      # -1 = all classes equally
+    sampler:        str   = "ddim",
+    guidance_scale: float = 3.0,
+    ddim_steps:     int   = 50,
+    ddim_eta:       float = 0.0,
+    n_real:         int   = 10_000,
+    checkpoint:     str   = "",
+) -> dict:
+    """
+    Generate `num_samples` images on the GPU, then compute FID and IS
+    against the CIFAR-10 test set — all on the remote server.
+
+    Returns dict: {'IS_mean', 'IS_std', 'FID', 'num_generated', 'num_real'}
+    """
+    import sys, os
+    sys.path.append("/app")
+    sys.path.append("/app/src")
+
+    import torch
+    from src.model     import ConditionalUNet
+    from src.diffusion import GaussianDiffusion
+    from src.metrics   import evaluate
+
+    device = torch.device("cuda")
+    print(f"[metrics] device={device}  samples={num_samples}  "
+          f"sampler={sampler.upper()}  guidance={guidance_scale}")
+
+    # ── Load model ───────────────────────────────────────────────────────────
+    ckpt_path = checkpoint or os.path.join(CHECKPOINT_DIR, "model.pth")
+    if not os.path.isfile(ckpt_path):
+        raise FileNotFoundError(f"No checkpoint at {ckpt_path}. Train first.")
+
+    ckpt       = torch.load(ckpt_path, map_location=device, weights_only=False)
+    saved_args = ckpt.get("args", {})
+    base_ch    = saved_args.get("base_ch", 128)
+    T          = saved_args.get("T", 1000)
+
+    model = ConditionalUNet(in_channels=3, base_ch=base_ch, num_classes=10, dropout=0.0)
+    key   = "ema_state_dict" if "ema_state_dict" in ckpt else "model_state_dict"
+    model.load_state_dict(ckpt[key])
+    model = model.to(device).eval()
+    print(f"[metrics] loaded {'EMA' if 'ema' in key else 'model'} weights")
+
+    diffusion = GaussianDiffusion(T=T, device=str(device))
+
+    # ── Generate images ───────────────────────────────────────────────────────
+    classes    = list(range(10)) if label_class == -1 else [label_class]
+    per_class  = num_samples // len(classes)
+    all_images = []
+
+    for cls in classes:
+        remaining = num_samples - len(all_images)
+        n         = min(per_class, remaining)
+        if n <= 0:
+            break
+        print(f"[metrics] generating {n} images for class {cls}…")
+        shape = (n, 3, 32, 32)
+        if sampler == "ddpm":
+            imgs = diffusion.ddpm_sample(model, shape, cls, str(device), guidance_scale)
+        else:
+            imgs = diffusion.ddim_sample(model, shape, cls, str(device),
+                                         steps=ddim_steps, eta=ddim_eta,
+                                         guidance_scale=guidance_scale)
+        all_images.append(imgs.cpu())
+
+    generated = torch.cat(all_images, dim=0)
+    print(f"[metrics] total generated: {generated.shape[0]}")
+
+    # ── Compute FID + IS ──────────────────────────────────────────────────────
+    results = evaluate(
+        generated = generated,
+        data_dir  = "/vol/data",
+        device    = str(device),
+        n_real    = n_real,
+    )
+    results["num_generated"] = generated.shape[0]
+    results["num_real"]      = n_real
+    return results
+
+
 # ── Local entrypoint — streams results to disk as they arrive ────────────────
 
 @app.local_entrypoint()
@@ -182,6 +273,8 @@ def main(
     batch_size:     int   = 4,
     output_dir:     str   = "./generated",
     checkpoint:     str   = "",
+    compute_metrics: bool = False,  # pass --compute-metrics to enable
+    metrics_samples: int  = 1000,   # images to generate for metrics
 ):
     # No local PIL/numpy needed — remote sends ready-made PNG bytes
     out = Path(output_dir)
@@ -216,6 +309,26 @@ def main(
 
         print(f"  [local] class {cls} ({cls_name}) complete — "
               f"{num_images} image(s) in {out}/")
+
+    # ── FID / IS (runs on Modal GPU, reports back) ────────────────────────────
+    if compute_metrics:
+        print(f"\n── Computing FID & IS on Modal GPU "
+              f"({metrics_samples} samples) ────────────")
+        scores = evaluate_metrics.remote(
+            num_samples    = metrics_samples,
+            label_class    = label_class,
+            sampler        = sampler,
+            guidance_scale = guidance_scale,
+            ddim_steps     = ddim_steps,
+            ddim_eta       = ddim_eta,
+            checkpoint     = checkpoint,
+        )
+        print(f"\n  ┌─────────────────────────────────────────┐")
+        print(f"  │  Samples : {scores['num_generated']:>6}  "
+              f"Real ref : {scores['num_real']:>6}      │")
+        print(f"  │  IS      : {scores['IS_mean']:>7.3f} ± {scores['IS_std']:.3f}          │")
+        print(f"  │  FID     : {scores['FID']:>7.3f}                       │")
+        print(f"  └─────────────────────────────────────────┘")
 
     print(f"\nAll done. Open {out}/ in VS Code Explorer to browse results.")
 

@@ -128,6 +128,17 @@ def generate(args):
             save_image(img, ind_dir / f"{i:04d}.png")
         print(f"Saved {len(images)} images → {ind_dir}/")
 
+    # ── Metrics ─────────────────────────────────────────────────
+    if args.compute_metrics:
+        from src.metrics import evaluate
+        evaluate(
+            generated = images,
+            data_dir  = args.metrics_data_dir,
+            device    = str(device),
+            n_real    = args.metrics_n_real,
+            skip_fid  = args.skip_fid,
+        )
+
 
 # ─────────────────────────────────────────────────────────────
 # CLI
@@ -179,6 +190,23 @@ def get_parser():
     p.add_argument(
         "--cpu", action="store_true",
         help="Force CPU inference",
+    )
+    # ── Metrics ──────────────────────────────────────────────────────────────
+    p.add_argument(
+        "--compute_metrics", action="store_true",
+        help="Compute FID and IS after generation",
+    )
+    p.add_argument(
+        "--metrics_data_dir", type=str, default="./data",
+        help="Directory to download/find CIFAR-10 for FID reference (default: ./data)",
+    )
+    p.add_argument(
+        "--metrics_n_real", type=int, default=10_000,
+        help="Number of real CIFAR-10 images used as FID reference (default: 10000)",
+    )
+    p.add_argument(
+        "--skip_fid", action="store_true",
+        help="Skip FID, compute IS only (faster, no real images needed)",
     )
     return p
 
