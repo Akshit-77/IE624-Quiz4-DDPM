@@ -8,6 +8,7 @@ DATA_DIR       = "/vol/data"
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
+    .env({"PYTHONUNBUFFERED": "1"})
     .uv_pip_install(
         "torch==2.3.1",
         "torchvision==0.18.1",

@@ -16,11 +16,14 @@ CIFAR-10 class map:
     5=dog       6=frog        7=horse 8=ship 9=truck
 """
 
+import sys
 import argparse
 from pathlib import Path
 
 import torch
 from torchvision.utils import save_image
+
+sys.stdout.reconfigure(line_buffering=True)
 
 from src.model import ConditionalUNet
 from src.diffusion import GaussianDiffusion
@@ -71,11 +74,11 @@ def generate(args):
     device     = torch.device("cpu" if args.cpu else ("cuda" if torch.cuda.is_available() else "cpu"))
     class_name = CIFAR10_CLASSES[args.label_class]
 
-    print(f"Device        : {device}")
-    print(f"Class         : {args.label_class} ({class_name})")
-    print(f"Sampler       : {args.sampler.upper()}")
-    print(f"Num images    : {args.num_images}")
-    print(f"Guidance scale: {args.guidance_scale}")
+    print(f"Device        : {device}",           flush=True)
+    print(f"Class         : {args.label_class} ({class_name})", flush=True)
+    print(f"Sampler       : {args.sampler.upper()}", flush=True)
+    print(f"Num images    : {args.num_images}",  flush=True)
+    print(f"Guidance scale: {args.guidance_scale}", flush=True)
 
     # ── Load model ──────────────────────────────────────────────
     model, saved_args = load_model(args.checkpoint, device)
@@ -85,7 +88,7 @@ def generate(args):
     shape = (args.num_images, 3, 32, 32)
 
     # ── Sample ──────────────────────────────────────────────────
-    print(f"\nSampling…", end=" ", flush=True)
+    print(f"\nSampling…  (this may take a while)", end=" ", flush=True)
 
     if args.sampler.lower() == "ddpm":
         images = diffusion.ddpm_sample(
@@ -108,7 +111,7 @@ def generate(args):
     else:
         raise ValueError(f"Unknown sampler '{args.sampler}'. Choose 'ddpm' or 'ddim'.")
 
-    print("done.")
+    print("done.", flush=True)
 
     # ── Save ────────────────────────────────────────────────────
     out_dir = Path(args.output_dir)
@@ -118,7 +121,7 @@ def generate(args):
     nrow      = max(1, int(args.num_images ** 0.5))
     grid_path = out_dir / f"class{args.label_class}_{class_name}_{args.sampler}.png"
     save_image(images, grid_path, nrow=nrow)
-    print(f"Saved grid  → {grid_path}")
+    print(f"Saved grid  → {grid_path}", flush=True)
 
     # Individual images (optional)
     if args.save_individual:
@@ -126,7 +129,7 @@ def generate(args):
         ind_dir.mkdir(exist_ok=True)
         for i, img in enumerate(images):
             save_image(img, ind_dir / f"{i:04d}.png")
-        print(f"Saved {len(images)} images → {ind_dir}/")
+        print(f"Saved {len(images)} images → {ind_dir}/", flush=True)
 
     # ── Metrics ─────────────────────────────────────────────────
     if args.compute_metrics:

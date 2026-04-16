@@ -16,10 +16,14 @@ Minimum recommended sample sizes:
   FID : ≥ 1 000 images  (10 000–50 000 for SOTA comparisons)
 """
 
+import sys
 import torch
 import torchvision
 import torchvision.transforms as T
 from torch.utils.data import DataLoader, Subset
+
+# Force line-buffered stdout so every print appears immediately in VS Code
+sys.stdout.reconfigure(line_buffering=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -134,35 +138,37 @@ def evaluate(
 
     if n < 100:
         print(f"\n  [metrics] WARNING: only {n} images — "
-              "scores will have very high variance. Use ≥1 000 for reliable results.")
+              "scores will have very high variance. Use ≥1 000 for reliable results.",
+              flush=True)
     elif n < 1_000:
         print(f"\n  [metrics] NOTE: {n} images — "
-              "scores are approximate. Use ≥1 000 for reliable FID/IS.")
+              "scores are approximate. Use ≥1 000 for reliable FID/IS.",
+              flush=True)
 
     # ── Inception Score ───────────────────────────────────────────────────────
     print("\n  [metrics] Computing Inception Score…", end=" ", flush=True)
     is_mean, is_std = compute_inception_score(generated, device=device, splits=splits)
     results["IS_mean"] = is_mean
     results["IS_std"]  = is_std
-    print(f"IS = {is_mean:.3f} ± {is_std:.3f}")
+    print(f"done.  IS = {is_mean:.3f} ± {is_std:.3f}", flush=True)
 
     # ── FID ───────────────────────────────────────────────────────────────────
     if not skip_fid:
         print(f"  [metrics] Loading {n_real} real CIFAR-10 images…",
               end=" ", flush=True)
         real = _load_cifar10(data_dir, train=False, n=n_real)
-        print(f"{real.shape[0]} loaded.")
+        print(f"{real.shape[0]} loaded.", flush=True)
 
         print("  [metrics] Computing FID…", end=" ", flush=True)
         fid = compute_fid(generated, real, device=device)
         results["FID"] = fid
-        print(f"FID = {fid:.3f}")
+        print(f"done.  FID = {fid:.3f}", flush=True)
 
     # ── Summary ───────────────────────────────────────────────────────────────
-    print("\n  ┌─────────────────────────────────┐")
-    print(f"  │  IS   : {is_mean:7.3f} ± {is_std:.3f}          │")
+    print("\n  ┌─────────────────────────────────┐", flush=True)
+    print(f"  │  IS   : {is_mean:7.3f} ± {is_std:.3f}          │", flush=True)
     if "FID" in results:
-        print(f"  │  FID  : {results['FID']:7.3f}               │")
-    print("  └─────────────────────────────────┘")
+        print(f"  │  FID  : {results['FID']:7.3f}               │", flush=True)
+    print("  └─────────────────────────────────┘", flush=True)
 
     return results
