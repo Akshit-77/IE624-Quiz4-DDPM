@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pth
+.venv/
+*.egg-info/
+
+# Data / outputs
+data/
+checkpoints/
+generated/
+
+# Local test clone
+test/
+
+# Memory / editor
+.claude/
+
+# Misc
+*.log
