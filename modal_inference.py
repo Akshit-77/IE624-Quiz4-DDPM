@@ -18,6 +18,7 @@ LOCAL_DIR = f"IE624_{ROLL}"
 app = modal.App("ie624-diffusion-inference")
 
 # ─── Container image ──────────────────────────────────────────────────────────
+# add_local_file embeds inference.py and weights.pth into the image
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
@@ -31,16 +32,16 @@ image = (
         "Pillow",
         "numpy",
     )
-)
-
-# Mount the inference script and weights
-inference_mount = modal.Mount.from_local_file(
-    local_path=f"{LOCAL_DIR}/inference.py",
-    remote_path="/root/inference.py",
-)
-weights_mount = modal.Mount.from_local_file(
-    local_path=f"{LOCAL_DIR}/weights.pth",
-    remote_path="/root/weights.pth",
+    .add_local_file(
+        local_path=f"{LOCAL_DIR}/inference.py",
+        remote_path="/root/inference.py",
+        copy=True,
+    )
+    .add_local_file(
+        local_path=f"{LOCAL_DIR}/weights.pth",
+        remote_path="/root/weights.pth",
+        copy=True,
+    )
 )
 
 # Volume for output images
@@ -56,7 +57,6 @@ OUT_DIR    = "/vol/generated"
     memory=16384,
     timeout=3600,
     volumes={OUT_DIR: out_volume},
-    mounts=[inference_mount, weights_mount],
 )
 def run_inference(label_class: int = 1, n_samples: int = 1000, sampler: str = "ddim"):
     import subprocess
@@ -124,11 +124,10 @@ def main(
         remote_prefix = f"class{cls}/"
         print(f"Downloading class {cls} images to {local_cls_dir} ...")
 
-        for entry in vol.listdir(remote_prefix):
+        for entry in vol.iterdir(remote_prefix):
             dest = os.path.join(local_cls_dir, os.path.basename(entry.path))
             with open(dest, "wb") as f:
-                for chunk in vol.read_file(entry.path):
-                    f.write(chunk)
+                f.write(vol.read_file(entry.path))
 
         n_downloaded = len(os.listdir(local_cls_dir))
         print(f"  Downloaded {n_downloaded} files to {local_cls_dir}")

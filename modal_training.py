@@ -15,6 +15,7 @@ LOCAL_DIR = f"IE624_{ROLL}"
 app = modal.App("ie624-diffusion-training")
 
 # ─── Container image ──────────────────────────────────────────────────────────
+# add_local_file embeds training.py into the image (copy=True → built into layer)
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
@@ -22,17 +23,16 @@ image = (
         "torchvision==0.18.1",
         extra_index_url="https://download.pytorch.org/whl/cu121",
     )
+    .add_local_file(
+        local_path=f"{LOCAL_DIR}/training.py",
+        remote_path="/root/training.py",
+        copy=True,
+    )
 )
 
 # Modal volume — persists weights across runs
 volume     = modal.Volume.from_name("ie624-weights", create_if_missing=True)
 VOLUME_DIR = "/vol/weights"
-
-# Mount the local training script into the container
-training_mount = modal.Mount.from_local_file(
-    local_path=f"{LOCAL_DIR}/training.py",
-    remote_path="/root/training.py",
-)
 
 
 # ─── Remote training function ─────────────────────────────────────────────────
@@ -43,7 +43,6 @@ training_mount = modal.Mount.from_local_file(
     memory=32768,
     timeout=7200,           # 2 hours
     volumes={VOLUME_DIR: volume},
-    mounts=[training_mount],
 )
 def train_diffusion():
     import subprocess
@@ -82,8 +81,7 @@ def main():
 
     dest = os.path.join(LOCAL_DIR, "weights.pth")
     with open(dest, "wb") as f:
-        for chunk in vol.read_file("weights.pth"):
-            f.write(chunk)
+        f.write(vol.read_file("weights.pth"))
 
     print(f"weights.pth downloaded to {dest}")
     print("Done. Submit IE624_531/ with training.py, inference.py, weights.pth.")
