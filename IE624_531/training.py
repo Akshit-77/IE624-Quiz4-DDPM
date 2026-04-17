@@ -18,7 +18,7 @@ NUM_CLASSES  = 10
 NULL_CLASS   = 10           # classifier-free guidance null token index
 T            = 1000         # diffusion timesteps
 BATCH_SIZE   = 256
-EPOCHS       = 500
+EPOCHS       = 800
 LR           = 2e-4
 EMA_DECAY    = 0.9999
 CFG_DROPOUT  = 0.15         # probability of using null class during training
@@ -138,7 +138,7 @@ class UNet(nn.Module):
     Channel progression: 128 -> 256 -> 512
     Self-attention applied at 16x16 resolution (both encoder and decoder).
     """
-    def __init__(self, base_ch=128, num_classes=NUM_CLASSES):
+    def __init__(self, base_ch=192, num_classes=NUM_CLASSES):
         super().__init__()
         n_cls    = num_classes + 1          # +1 for null CFG token
         time_dim = base_ch * 4
@@ -260,7 +260,7 @@ def train():
     model   = UNet().to(DEVICE)
     ema     = EMA(model, decay=EMA_DECAY)
     optim   = torch.optim.AdamW(model.parameters(), lr=LR)
-    sched   = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=EPOCHS)
+    sched   = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=EPOCHS, eta_min=1e-5)
     dc      = DiffusionConstants(T=T, device=DEVICE)
 
     n_params = sum(p.numel() for p in model.parameters())

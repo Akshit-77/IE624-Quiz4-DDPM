@@ -133,7 +133,7 @@ class Upsample(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, base_ch=128, num_classes=NUM_CLASSES):
+    def __init__(self, base_ch=192, num_classes=NUM_CLASSES):
         super().__init__()
         n_cls    = num_classes + 1
         time_dim = base_ch * 4
@@ -215,7 +215,7 @@ class UNet(nn.Module):
 # ─── DDPM Sampler ─────────────────────────────────────────────────────────────
 
 @torch.no_grad()
-def ddpm_sample(model, dc, n_samples, label, cfg_scale=3.0, batch_size=32):
+def ddpm_sample(model, dc, n_samples, label, cfg_scale=5.0, batch_size=32):
     """Full T-step DDPM reverse diffusion with classifier-free guidance."""
     model.eval()
     all_imgs  = []
@@ -253,7 +253,7 @@ def ddpm_sample(model, dc, n_samples, label, cfg_scale=3.0, batch_size=32):
 # ─── DDIM Sampler ─────────────────────────────────────────────────────────────
 
 @torch.no_grad()
-def ddim_sample(model, dc, n_samples, label, steps=50, eta=0.0, cfg_scale=3.0, batch_size=32):
+def ddim_sample(model, dc, n_samples, label, steps=100, eta=0.0, cfg_scale=5.0, batch_size=32):
     """DDIM sampler (deterministic by default, eta=0) with CFG."""
     model.eval()
     # Evenly spaced timesteps descending from T-1 to 0
