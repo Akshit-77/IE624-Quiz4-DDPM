@@ -127,7 +127,7 @@ def main(
         for entry in vol.iterdir(remote_prefix):
             dest = os.path.join(local_cls_dir, os.path.basename(entry.path))
             with open(dest, "wb") as f:
-                f.write(vol.read_file(entry.path))
+                f.write(b"".join(vol.read_file(entry.path)))
 
         n_downloaded = len(os.listdir(local_cls_dir))
         print(f"  Downloaded {n_downloaded} files to {local_cls_dir}")

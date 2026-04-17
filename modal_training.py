@@ -81,7 +81,7 @@ def main():
 
     dest = os.path.join(LOCAL_DIR, "weights.pth")
     with open(dest, "wb") as f:
-        f.write(vol.read_file("weights.pth"))
+        f.write(b"".join(vol.read_file("weights.pth")))
 
     print(f"weights.pth downloaded to {dest}")
     print("Done. Submit IE624_531/ with training.py, inference.py, weights.pth.")
