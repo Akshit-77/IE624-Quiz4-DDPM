@@ -19,9 +19,9 @@ app = modal.App("ie624-diffusion-training")
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
-        "torch==2.3.1",
-        "torchvision==0.18.1",
-        extra_index_url="https://download.pytorch.org/whl/cu121",
+        "torch",
+        "torchvision",
+        extra_index_url="https://download.pytorch.org/whl/cu124",
     )
     .add_local_file(
         local_path=f"{LOCAL_DIR}/training.py",
@@ -38,7 +38,7 @@ VOLUME_DIR = "/vol/weights"
 # ─── Remote training function ─────────────────────────────────────────────────
 @app.function(
     image=image,
-    gpu="A100",
+    gpu="B200",
     cpu=8,
     memory=32768,
     timeout=7200,           # 2 hours

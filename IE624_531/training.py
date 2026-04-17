@@ -18,12 +18,12 @@ NUM_CLASSES  = 10
 NULL_CLASS   = 10           # classifier-free guidance null token index
 T            = 1000         # diffusion timesteps
 BATCH_SIZE   = 256
-EPOCHS       = 1
+EPOCHS       = 500
 LR           = 2e-4
 EMA_DECAY    = 0.9999
 CFG_DROPOUT  = 0.15         # probability of using null class during training
 GRAD_CLIP    = 1.0
-SAVE_EVERY   = 10           # save checkpoint every N epochs
+SAVE_EVERY   = 50           # save checkpoint every N epochs
 OUT_DIR      = "."          # weights.pth saved here
 
 
