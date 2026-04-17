@@ -21,7 +21,7 @@ image = (
     .pip_install(
         "torch",
         "torchvision",
-        extra_index_url="https://download.pytorch.org/whl/cu124",
+        extra_index_url="https://download.pytorch.org/whl/cu130",
     )
     .add_local_file(
         local_path=f"{LOCAL_DIR}/training.py",
@@ -45,24 +45,24 @@ VOLUME_DIR = "/vol/weights"
     volumes={VOLUME_DIR: volume},
 )
 def train_diffusion():
-    import subprocess
-    import shutil
+    import subprocess, os
 
-    print("=== IE624 Quiz 4 — Training on Modal A100 ===", flush=True)
+    print("=== IE624 Quiz 4 — Training on Modal B200 ===", flush=True)
 
-    # Run training.py (saves weights.pth to /root/)
-    result = subprocess.run(
+    # CKPT_DIR → volume path so checkpoints survive job restarts
+    env = {**os.environ, "CKPT_DIR": VOLUME_DIR}
+
+    subprocess.run(
         ["python", "/root/training.py"],
         cwd="/root",
+        env=env,
         check=True,
     )
 
-    # Copy final weights + periodic checkpoints to the volume
-    import glob
-    for pth in glob.glob("/root/weights*.pth"):
-        dest = f"{VOLUME_DIR}/{os.path.basename(pth)}"
-        shutil.copy(pth, dest)
-        print(f"Copied {pth} -> {dest}", flush=True)
+    # weights.pth is written to /root/ by training.py; copy to volume
+    import shutil
+    shutil.copy("/root/weights.pth", f"{VOLUME_DIR}/weights.pth")
+    print(f"Copied weights.pth → {VOLUME_DIR}/weights.pth", flush=True)
 
     volume.commit()
     return "Training complete — weights persisted to volume."

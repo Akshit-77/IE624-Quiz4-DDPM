@@ -17,7 +17,7 @@ DEVICE       = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_CLASSES  = 10
 NULL_CLASS   = 10           # classifier-free guidance null token index
 T            = 1000         # diffusion timesteps
-BATCH_SIZE   = 256
+BATCH_SIZE   = 1024
 EPOCHS       = 800
 LR           = 2e-4
 EMA_DECAY    = 0.9999
@@ -25,6 +25,7 @@ CFG_DROPOUT  = 0.15         # probability of using null class during training
 GRAD_CLIP    = 1.0
 SAVE_EVERY   = 50           # save checkpoint every N epochs
 OUT_DIR      = "."          # weights.pth saved here
+CKPT_DIR     = os.environ.get("CKPT_DIR", OUT_DIR)  # override via env for Modal volume
 
 
 # ─── Cosine Noise Schedule ────────────────────────────────────────────────────
@@ -266,7 +267,25 @@ def train():
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {n_params:,}", flush=True)
 
-    for epoch in range(1, EPOCHS + 1):
+    # ── Resume from latest checkpoint if one exists ────────────────────────────
+    import glob
+    start_epoch = 1
+    os.makedirs(CKPT_DIR, exist_ok=True)
+    resume_ckpts = sorted(glob.glob(os.path.join(CKPT_DIR, "resume_ep*.pth")))
+    if resume_ckpts:
+        resume_path = resume_ckpts[-1]
+        print(f"Resuming from {resume_path} ...", flush=True)
+        ckpt = torch.load(resume_path, map_location=DEVICE)
+        model.load_state_dict(ckpt["model"])
+        ema.shadow.load_state_dict(ckpt["ema"])
+        optim.load_state_dict(ckpt["optim"])
+        sched.load_state_dict(ckpt["sched"])
+        start_epoch = ckpt["epoch"] + 1
+        print(f"Resumed from epoch {ckpt['epoch']}  loss={ckpt['loss']:.5f}", flush=True)
+    else:
+        print("No checkpoint found — training from scratch.", flush=True)
+
+    for epoch in range(start_epoch, EPOCHS + 1):
         model.train()
         total_loss = 0.0
 
@@ -303,14 +322,25 @@ def train():
         avg = total_loss / len(loader)
         print(f"Epoch {epoch:3d}/{EPOCHS}  loss={avg:.5f}", flush=True)
 
-        if epoch % SAVE_EVERY == 0:
-            ckpt = os.path.join(OUT_DIR, f"weights_ep{epoch:03d}.pth")
-            torch.save(ema.state_dict(), ckpt)
-            print(f"  Checkpoint → {ckpt}", flush=True)
+        if epoch % SAVE_EVERY == 0 or epoch == EPOCHS:
+            # Full resume checkpoint — survives job restarts
+            resume_ckpt = os.path.join(CKPT_DIR, f"resume_ep{epoch:03d}.pth")
+            torch.save({
+                "epoch": epoch,
+                "model": model.state_dict(),
+                "ema":   ema.shadow.state_dict(),
+                "optim": optim.state_dict(),
+                "sched": sched.state_dict(),
+                "loss":  avg,
+            }, resume_ckpt)
+            # EMA-only weights for inference
+            ema_ckpt = os.path.join(CKPT_DIR, f"weights_ep{epoch:03d}.pth")
+            torch.save(ema.shadow.state_dict(), ema_ckpt)
+            print(f"  Saved resume checkpoint → {resume_ckpt}", flush=True)
 
-    # Final EMA weights
+    # Final EMA weights for submission
     final = os.path.join(OUT_DIR, "weights.pth")
-    torch.save(ema.state_dict(), final)
+    torch.save(ema.shadow.state_dict(), final)
     print(f"Training complete. EMA weights saved → {final}", flush=True)
 
 
