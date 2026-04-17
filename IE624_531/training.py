@@ -19,7 +19,8 @@ NULL_CLASS   = 10           # classifier-free guidance null token index
 T            = 1000         # diffusion timesteps
 BATCH_SIZE   = 1024
 EPOCHS       = 800
-LR           = 2e-4
+LR           = 4e-4
+LR_WARMUP    = 5                # epochs to linearly warm up LR from 0
 EMA_DECAY    = 0.9999
 CFG_DROPOUT  = 0.15         # probability of using null class during training
 GRAD_CLIP    = 1.0
@@ -261,7 +262,9 @@ def train():
     model   = UNet().to(DEVICE)
     ema     = EMA(model, decay=EMA_DECAY)
     optim   = torch.optim.AdamW(model.parameters(), lr=LR)
-    sched   = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=EPOCHS, eta_min=1e-5)
+    warmup  = torch.optim.lr_scheduler.LinearLR(optim, start_factor=1/LR_WARMUP, total_iters=LR_WARMUP)
+    cosine  = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=EPOCHS - LR_WARMUP, eta_min=1e-5)
+    sched   = torch.optim.lr_scheduler.SequentialLR(optim, schedulers=[warmup, cosine], milestones=[LR_WARMUP])
     dc      = DiffusionConstants(T=T, device=DEVICE)
 
     n_params = sum(p.numel() for p in model.parameters())
